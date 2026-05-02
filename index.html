@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rental Fleet ROI Dashboard Prototype</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-2: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --good: #22c55e;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+      --accent: #38bdf8;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(180deg, #0b1020 0%, var(--bg) 100%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    h1 { margin: 0 0 6px; font-size: 1.8rem; }
+    .sub { color: var(--muted); margin-bottom: 20px; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .card {
+      background: rgba(17, 24, 39, 0.85);
+      border: 1px solid #243041;
+      border-radius: 10px;
+      padding: 12px;
+    }
+
+    .label { color: var(--muted); font-size: 0.82rem; }
+    .value { font-size: 1.35rem; font-weight: 700; margin-top: 5px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid #263244;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #233044;
+      text-align: right;
+      white-space: nowrap;
+      font-size: 0.92rem;
+    }
+
+    th:first-child, td:first-child,
+    th:nth-child(2), td:nth-child(2) { text-align: left; }
+
+    th {
+      background: var(--panel-2);
+      color: #d1d5db;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    .pill {
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 5px 9px;
+      border-radius: 999px;
+      display: inline-block;
+      border: 1px solid transparent;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .keep { color: #a7f3d0; background: #052e1f; border-color: #14532d; }
+    .review { color: #fde68a; background: #3f2c09; border-color: #78350f; }
+    .dispose { color: #fecaca; background: #3f1117; border-color: #7f1d1d; }
+
+    .legend {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 0.87rem;
+      line-height: 1.5;
+      background: rgba(17, 24, 39, 0.6);
+      border: 1px solid #243041;
+      border-radius: 10px;
+      padding: 12px;
+    }
+
+    code { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Rental Fleet ROI Dashboard</h1>
+    <div class="sub">Prototype view with utilization, revenue, and lifecycle action triggers.</div>
+
+    <div class="cards" id="kpis"></div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Asset ID</th>
+          <th>Category</th>
+          <th>Financial Utilization</th>
+          <th>LTD Time Utilization</th>
+          <th>Acquisition Cost</th>
+          <th>MTD Revenue</th>
+          <th>R12 Revenue</th>
+          <th>Annualized ROI</th>
+          <th>Recommended Action</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+
+    <div class="legend">
+      <strong>Action Trigger Logic:</strong><br/>
+      <span class="pill keep">Keep</span> if <code>ROI ≥ 20%</code> and <code>Financial Utilization ≥ 75%</code> and <code>LTD Time Utilization ≥ 65%</code><br/>
+      <span class="pill review">Review</span> if <code>ROI between 8% and 20%</code> or utilization trends are mixed<br/>
+      <span class="pill dispose">Dispose</span> if <code>ROI &lt; 8%</code> and both utilization metrics are weak.
+    </div>
+  </div>
+
+  <script>
+    const fleet = [
+      { id: 'EX-1024', category: 'Excavator', financialUtilization: 0.81, ltdTimeUtilization: 0.71, acquisitionCost: 195000, mtdRevenue: 11200, r12Revenue: 236000 },
+      { id: 'LF-4301', category: 'Lift', financialUtilization: 0.67, ltdTimeUtilization: 0.62, acquisitionCost: 48000, mtdRevenue: 2100, r12Revenue: 38000 },
+      { id: 'GN-8810', category: 'Generator', financialUtilization: 0.51, ltdTimeUtilization: 0.43, acquisitionCost: 36000, mtdRevenue: 950, r12Revenue: 6100 },
+      { id: 'CM-7718', category: 'Compactor', financialUtilization: 0.74, ltdTimeUtilization: 0.66, acquisitionCost: 56000, mtdRevenue: 2900, r12Revenue: 56000 },
+      { id: 'TL-2204', category: 'Telehandler', financialUtilization: 0.84, ltdTimeUtilization: 0.79, acquisitionCost: 142000, mtdRevenue: 9100, r12Revenue: 198000 }
+    ];
+
+    const formatCurrency = n => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+    const formatPct = n => `${(n * 100).toFixed(1)}%`;
+    const roi = row => row.r12Revenue / row.acquisitionCost;
+
+    function action(row) {
+      const r = roi(row);
+      const strong = row.financialUtilization >= 0.75 && row.ltdTimeUtilization >= 0.65;
+      const weak = row.financialUtilization < 0.6 && row.ltdTimeUtilization < 0.5;
+
+      if (r >= 0.2 && strong) return { label: 'Keep', className: 'keep' };
+      if (r < 0.08 && weak) return { label: 'Dispose', className: 'dispose' };
+      return { label: 'Review', className: 'review' };
+    }
+
+    function render() {
+      const rows = document.getElementById('rows');
+      rows.innerHTML = fleet.map(row => {
+        const r = roi(row);
+        const decision = action(row);
+        return `
+          <tr>
+            <td>${row.id}</td>
+            <td>${row.category}</td>
+            <td>${formatPct(row.financialUtilization)}</td>
+            <td>${formatPct(row.ltdTimeUtilization)}</td>
+            <td>${formatCurrency(row.acquisitionCost)}</td>
+            <td>${formatCurrency(row.mtdRevenue)}</td>
+            <td>${formatCurrency(row.r12Revenue)}</td>
+            <td>${formatPct(r)}</td>
+            <td><span class="pill ${decision.className}">${decision.label}</span></td>
+          </tr>`;
+      }).join('');
+
+      const totalAcq = fleet.reduce((s, x) => s + x.acquisitionCost, 0);
+      const totalMTD = fleet.reduce((s, x) => s + x.mtdRevenue, 0);
+      const totalR12 = fleet.reduce((s, x) => s + x.r12Revenue, 0);
+      const avgFinUtil = fleet.reduce((s, x) => s + x.financialUtilization, 0) / fleet.length;
+      const avgLTD = fleet.reduce((s, x) => s + x.ltdTimeUtilization, 0) / fleet.length;
+      const portfolioROI = totalR12 / totalAcq;
+
+      document.getElementById('kpis').innerHTML = [
+        ['Portfolio Acquisition Cost', formatCurrency(totalAcq)],
+        ['Portfolio MTD Revenue', formatCurrency(totalMTD)],
+        ['Portfolio R12 Revenue', formatCurrency(totalR12)],
+        ['Avg Financial Utilization', formatPct(avgFinUtil)],
+        ['Avg LTD Time Utilization', formatPct(avgLTD)],
+        ['Portfolio Annualized ROI', formatPct(portfolioROI)]
+      ].map(([label, value]) => `
+        <div class="card">
+          <div class="label">${label}</div>
+          <div class="value">${value}</div>
+        </div>`).join('');
+    }
+
+    render();
+  </script>
+</body>
+</html>
